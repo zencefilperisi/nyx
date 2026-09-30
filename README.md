@@ -1,0 +1,77 @@
+# Nyx
+
+**A structure-aware, entropy-guided fuzzer for ASN.1/DER parsers — built to find
+real memory-safety bugs in X.509 certificate parsing.**
+
+Generic fuzzers waste most of their effort on inputs a structured parser rejects
+in the first few bytes. Nyx mutates a *parsed DER tree* instead of raw bytes, so
+every candidate stays structurally valid and reaches deep parser code — then it
+spends its energy where an information-theoretic signal says the payoff is
+highest.
+
+> **Status:** DER core (tree IR + parser + serializer) implemented, and verified
+> to round-trip a real X.509 certificate byte-for-byte. Mutator, X.509 grammar
+> layer, coverage, scheduler and benchmark are phased — see [DESIGN.md](DESIGN.md).
+
+## Why it's built this way
+
+- **Structure-aware:** a DER value is a nested Tag-Length-Value tree. Nyx parses
+  a seed into that tree, mutates the tree, and re-serialises — so it gets past
+  the tag/length checks that kill random byte mutations.
+- **Entropy-guided:** seeds that reach *rare* coverage edges carry more
+  information (`-log2(p)`), so they get more mutation energy; mutation operators
+  are chosen by a bandit governed by reward entropy. Whether this beats fixed
+  schedules is settled by benchmark, not asserted.
+- **Honest evaluation:** FuzzBench-style, ≥10 trials, median coverage with CI,
+  and a Mann-Whitney U test against **Nautilus** (the closest prior work),
+  AFL++ and libFuzzer.
+
+See [DESIGN.md](DESIGN.md) for the full architecture, prior-art positioning, and
+evaluation plan.
+
+## Build & test
+
+```bash
+cmake -S . -B build -DCMAKE_BUILD_TYPE=RelWithDebInfo
+cmake --build build -j
+ctest --test-dir build --output-on-failure
+```
+
+The test suite parses a hand-built structure, exercises high-tag-number and
+long-form length encodings, and (given a path) round-trips a real certificate:
+
+```bash
+# generate a DER cert and round-trip it through the core
+openssl req -x509 -newkey rsa:2048 -nodes -days 365 \
+  -keyout /tmp/k.pem -out /tmp/c.pem -subj "/CN=test"
+openssl x509 -in /tmp/c.pem -outform DER -out /tmp/c.der
+./build/test_roundtrip /tmp/c.der
+```
+
+Build with sanitizers while hacking on the engine itself:
+
+```bash
+cmake -S . -B build-asan -DNYX_ASAN=ON -DCMAKE_CXX_COMPILER=clang++
+cmake --build build-asan -j && ctest --test-dir build-asan
+```
+
+## Targets
+
+libtasn1 (primary), mbedTLS, OpenSSL — fetched and instrumented via
+`third_party/fetch_targets.sh`, hit through the harnesses in `harnesses/`.
+
+## Layout
+
+```
+include/nyx/   core headers (tree, parser, serializer, mutator, scheduler, coverage, grammar)
+src/           implementations + fuzzer driver (main.cpp)
+tests/         DER core tests (round-trip, encodings)
+harnesses/     libFuzzer-style harnesses for each target
+bench/         FuzzBench-style benchmark harness + plots
+third_party/   pinned target fetch/build scripts (not vendored)
+grammars/      X.509 grammar notes
+```
+
+## License
+
+MIT — see [LICENSE](LICENSE).

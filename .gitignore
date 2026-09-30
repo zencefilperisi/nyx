@@ -1,0 +1,23 @@
+# Build
+build/
+build-*/
+*.o
+*.a
+compile_commands.json
+
+# Fetched/built targets (reproduced via third_party/fetch_targets.sh)
+third_party/libtasn1-*/
+third_party/mbedtls/
+third_party/*.tar.gz
+target_*
+
+# Fuzzer output
+bench_results/
+crashes/
+corpus_out/
+*.crash
+
+# Editor / OS
+.vscode/
+.idea/
+.DS_Store
