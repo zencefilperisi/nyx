@@ -47,6 +47,13 @@ size_t coverage_edges_hit() {
 
 size_t coverage_total_edges() { return state().num_edges; }
 
+size_t coverage_covered_edges() {
+  auto& s = state();
+  size_t n = 0;
+  for (uint64_t h : s.global_hits) n += (h != 0);
+  return n;
+}
+
 size_t coverage_commit() {
   auto& s = state();
   size_t new_edges = 0;

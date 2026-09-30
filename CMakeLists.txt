@@ -20,6 +20,9 @@ add_library(nyx_core
   src/der_serializer.cpp
   src/mutator.cpp
   src/coverage.cpp
+  src/corpus.cpp
+  src/byte_mutator.cpp
+  src/engine.cpp
   # src/scheduler.cpp      # phase 3
   # src/grammar_x509.cpp   # phase 2b
 )
@@ -45,6 +48,14 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_executable(test_coverage tests/test_coverage.cpp)
   target_link_libraries(test_coverage PRIVATE nyx_core phase0_target)
   add_test(NAME coverage COMMAND test_coverage)
+
+  # Phase-1: coverage-guided loop against an instrumented demo target with a bug.
+  add_library(phase1_target STATIC tests/phase1_target.c)
+  target_compile_options(phase1_target PRIVATE
+    -O0 -fsanitize-coverage=trace-pc-guard,trace-cmp)
+  add_executable(test_engine tests/test_engine.cpp)
+  target_link_libraries(test_engine PRIVATE nyx_core phase1_target)
+  add_test(NAME engine COMMAND test_engine)
 endif()
 
 # Optional: build with sanitizers for local bug-hunting on the engine itself.

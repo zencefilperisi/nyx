@@ -38,6 +38,10 @@ size_t coverage_edges_hit();
 // target's constructors have run.
 size_t coverage_total_edges();
 
+// Number of distinct edges hit at least once across ALL executions so far
+// (cumulative coverage). This is the fuzzer's headline progress metric.
+size_t coverage_covered_edges();
+
 // Fold the last execution into the cumulative histogram. Returns the number of
 // edges seen for the FIRST time ever -- the fuzzer's primary reward signal.
 size_t coverage_commit();

@@ -9,9 +9,14 @@ every candidate stays structurally valid and reaches deep parser code — then i
 spends its energy where an information-theoretic signal says the payoff is
 highest.
 
-> **Status:** DER core (tree IR + parser + serializer) implemented, and verified
-> to round-trip a real X.509 certificate byte-for-byte. Mutator, X.509 grammar
-> layer, coverage, scheduler and benchmark are phased — see [DESIGN.md](DESIGN.md).
+> **Status:**
+> - ✅ **DER core** — tree IR + parser + serializer, round-trips a real X.509 cert byte-for-byte.
+> - ✅ **Phase 0** — SanitizerCoverage plumbing: edge coverage + `trace-cmp` operand capture, tested.
+> - ✅ **Phase 1** — working coverage-guided loop: corpus, byte mutator, in-process
+>   execution with crash trapping. Demonstrated finding a planted bug that blind
+>   fuzzing misses in the same budget.
+> - ⏳ Phase 2 (structure-aware mutator), 2b (X.509 grammar), 3 (entropy scheduler),
+>   4 (benchmark vs Nautilus). See [DESIGN.md](DESIGN.md).
 
 ## Why it's built this way
 
