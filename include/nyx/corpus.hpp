@@ -14,8 +14,9 @@ namespace nyx {
 
 struct CorpusEntry {
   std::vector<uint8_t> data;
-  size_t new_edges = 0;   // edges this input first discovered
+  size_t new_edges = 0;              // edges this input first discovered
   size_t times_chosen = 0;
+  std::vector<uint32_t> edges;       // edge set this input covers (for rarity)
 };
 
 class Corpus {

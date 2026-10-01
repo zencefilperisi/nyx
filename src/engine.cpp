@@ -14,6 +14,7 @@
 #include "nyx/der_serializer.hpp"
 #include "nyx/grammar_x509.hpp"
 #include "nyx/mutator.hpp"
+#include "nyx/scheduler.hpp"
 
 namespace nyx {
 namespace {
@@ -85,22 +86,35 @@ FuzzStats fuzz(TargetFn target, Corpus& corpus, const EngineOptions& opts) {
   std::mt19937_64 rng(opts.seed ^ 0xD1B54A32D192ED03ull);
   std::mt19937_64 sem_rng(opts.seed ^ 0x517CC1B727220A95ull);  // X.509 semantic ops
 
+  std::unique_ptr<Scheduler> scheduler =
+      (opts.scheduler == EngineOptions::SchedulerKind::kEntropy)
+          ? make_entropy_scheduler(opts.seed ^ 0x2545F4914F6CDD1Dull)
+          : make_uniform_scheduler(opts.seed ^ 0x2545F4914F6CDD1Dull);
+
   // Structure-aware candidate generation: parse the seed to a DER tree, mutate
   // the tree, re-serialize. Falls back to byte mutation when the seed is not
-  // valid DER (so the loop never stalls on unparseable inputs).
+  // valid DER (so the loop never stalls on unparseable inputs). `op_used`
+  // receives the single tree operator the scheduler chose (or -1 when a
+  // non-bandit path was taken: byte mutation or a semantic mutation).
   auto make_candidate = [&](const std::vector<uint8_t>& seed,
-                            const std::vector<uint8_t>* other) -> std::vector<uint8_t> {
+                            const std::vector<uint8_t>* other,
+                            int& op_used) -> std::vector<uint8_t> {
+    op_used = -1;
     if (opts.structure_aware) {
       ParseError err;
       auto tree = parse_der(seed, err);
       if (tree) {
-        // On X.509-looking inputs, sometimes apply a semantic (typed) mutation
-        // in addition to the generic tree mutation -- this is what drives the
-        // parser into date/OID/extension validation code.
-        if (opts.x509_semantic && looks_like_x509(*tree) &&
-            (sem_rng() & 1)) {
+        if (opts.x509_semantic && looks_like_x509(*tree) && (sem_rng() & 1)) {
+          // Typed semantic mutation (not a single bandit operator).
           mutate_x509_semantic(*tree, sem_rng);
+        } else if (opts.scheduler == EngineOptions::SchedulerKind::kEntropy) {
+          // Entropy scheduler drives operator choice via the UCB1 bandit.
+          MutationOp op = scheduler->choose_operator();
+          tree_mutator.apply(op, *tree, mcfg);
+          op_used = static_cast<int>(op);
         } else {
+          // Control: the hand-weighted mutator (a strong baseline the bandit
+          // must match or beat).
           tree_mutator.mutate(*tree, mcfg);
         }
         auto out = serialize_der(*tree);
@@ -112,10 +126,26 @@ FuzzStats fuzz(TargetFn target, Corpus& corpus, const EngineOptions& opts) {
     return mutator.mutate(seed, other);
   };
 
-  // Prime cumulative coverage with the existing corpus.
+  // Build the scheduler's view of the corpus: each seed's rarity is the summed
+  // self-information (-log2 p) of the edges it covers, under the current histogram.
+  auto build_seed_infos = [&]() {
+    std::vector<SeedInfo> infos;
+    infos.reserve(corpus.size());
+    for (size_t i = 0; i < corpus.size(); ++i) {
+      double rarity = 0.0;
+      for (uint32_t e : corpus[i].edges) rarity += coverage_edge_rarity(e);
+      infos.push_back({static_cast<uint64_t>(i), corpus[i].times_chosen,
+                       corpus[i].new_edges, rarity});
+    }
+    return infos;
+  };
+
+  // Prime cumulative coverage with the existing corpus, recording each seed's
+  // edge set so the scheduler can score rarity from the start.
   for (size_t i = 0; i < corpus.size(); ++i) {
     run_once(target, corpus[i].data.data(), corpus[i].data.size());
     coverage_commit();
+    corpus.at(i).edges = coverage_current_edges();
   }
   if (corpus.empty()) corpus.add({0x00});  // ensure at least one seed
 
@@ -131,7 +161,10 @@ FuzzStats fuzz(TargetFn target, Corpus& corpus, const EngineOptions& opts) {
 
   uint64_t iter = 0;
   for (; !out_of_budget(iter); ++iter) {
-    size_t idx = corpus.pick(rng);
+    // Seed selection: the scheduler weights by rarity (entropy) or uniformly.
+    auto infos = build_seed_infos();
+    size_t idx = static_cast<size_t>(scheduler->choose_seed(infos));
+    if (idx >= corpus.size()) idx = 0;
     corpus.at(idx).times_chosen++;
 
     const std::vector<uint8_t>* other = nullptr;
@@ -139,7 +172,8 @@ FuzzStats fuzz(TargetFn target, Corpus& corpus, const EngineOptions& opts) {
       size_t j = corpus.pick(rng);
       other = &corpus[j].data;
     }
-    std::vector<uint8_t> candidate = make_candidate(corpus[idx].data, other);
+    int op_used = -1;
+    std::vector<uint8_t> candidate = make_candidate(corpus[idx].data, other, op_used);
 
     bool crashed = run_once(target, candidate.data(), candidate.size());
     if (crashed) {
@@ -159,8 +193,12 @@ FuzzStats fuzz(TargetFn target, Corpus& corpus, const EngineOptions& opts) {
     }
 
     size_t new_edges = coverage_commit();
+    // Feed the operator bandit its reward (new edges discovered this round).
+    if (op_used >= 0) scheduler->update(idx, static_cast<MutationOp>(op_used), new_edges);
     if (new_edges > 0 && opts.coverage_guided) {
-      corpus.add(candidate, new_edges);  // interesting input -> keep it
+      auto edges = coverage_current_edges();
+      corpus.add(candidate, new_edges);
+      corpus.at(corpus.size() - 1).edges = std::move(edges);  // for rarity scoring
     }
   }
 

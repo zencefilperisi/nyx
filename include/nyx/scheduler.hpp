@@ -19,6 +19,7 @@
 //
 // PHASE 3.
 #include <cstdint>
+#include <memory>
 #include <vector>
 
 #include "nyx/mutator.hpp"

@@ -86,6 +86,14 @@ double coverage_edge_rarity(size_t edge_index) {
 
 const std::vector<CmpOperand>& coverage_cmp_operands() { return state().cmps; }
 
+std::vector<uint32_t> coverage_current_edges() {
+  auto& s = state();
+  std::vector<uint32_t> hit;
+  for (uint32_t i = 0; i < s.edges.size(); ++i)
+    if (s.edges[i]) hit.push_back(i);
+  return hit;
+}
+
 }  // namespace nyx
 
 // ---------------------------------------------------------------------------

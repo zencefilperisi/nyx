@@ -24,7 +24,11 @@ highest.
 >   duplicated extensions). On a target gated behind a semantically-valid boundary
 >   date, semantic mutation found the bug in ~130 iterations while generic
 >   structure-aware missed it in 400k.
-> - ⏳ Phase 3 (entropy scheduler), 4 (benchmark vs Nautilus). See [DESIGN.md](DESIGN.md).
+> - ✅ **Phase 3** — entropy-guided scheduler: rarity-weighted seed energy
+>   (self-information `-log2 p`) + a UCB1 operator bandit, with a uniform control.
+>   Mechanics proven deterministically (rare seed chosen 94% vs 20%; bandit
+>   converges to the rewarding operator).
+> - ⏳ Phase 4 (benchmark vs Nautilus/libFuzzer, with statistics). See [DESIGN.md](DESIGN.md).
 
 ## Why it's built this way
 

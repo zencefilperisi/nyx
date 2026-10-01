@@ -58,4 +58,8 @@ double coverage_edge_rarity(size_t edge_index);
 // Comparison operands captured during the last execution.
 const std::vector<CmpOperand>& coverage_cmp_operands();
 
+// Indices of the edges hit during the last execution (the seed's edge set),
+// used by the entropy scheduler to score a seed's rarity.
+std::vector<uint32_t> coverage_current_edges();
+
 }  // namespace nyx

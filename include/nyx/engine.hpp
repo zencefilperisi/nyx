@@ -37,6 +37,11 @@ struct EngineOptions {
   // also receive semantic, typed mutations (boundary dates, hostile serials,
   // malformed OIDs, duplicated extensions). Phase 2b.
   bool x509_semantic = false;
+  // Scheduler for seed energy + operator selection (structure-aware mode).
+  // Phase 3. kUniform is the control; kEntropy is rarity-weighted energy plus a
+  // UCB1 operator bandit.
+  enum class SchedulerKind { kUniform, kEntropy };
+  SchedulerKind scheduler = SchedulerKind::kUniform;
 };
 
 struct FuzzStats {

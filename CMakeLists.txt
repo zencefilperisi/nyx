@@ -24,7 +24,7 @@ add_library(nyx_core
   src/byte_mutator.cpp
   src/engine.cpp
   src/grammar_x509.cpp
-  # src/scheduler.cpp      # phase 3
+  src/scheduler.cpp
 )
 target_include_directories(nyx_core PUBLIC include)
 
@@ -73,6 +73,11 @@ if(CMAKE_C_COMPILER_ID MATCHES "Clang")
   add_executable(test_x509 tests/test_x509.cpp)
   target_link_libraries(test_x509 PRIVATE nyx_core phase2b_target)
   add_test(NAME x509 COMMAND test_x509)
+
+  # Phase-3: entropy-guided scheduler (mechanics + e2e against the phase-2 target).
+  add_executable(test_scheduler tests/test_scheduler.cpp)
+  target_link_libraries(test_scheduler PRIVATE nyx_core phase2_target)
+  add_test(NAME scheduler COMMAND test_scheduler)
 endif()
 
 # Optional: build with sanitizers for local bug-hunting on the engine itself.
