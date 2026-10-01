@@ -1,33 +1,88 @@
 #!/usr/bin/env bash
-# Fetch and build the fuzzing targets with coverage + sanitizer instrumentation.
-# Targets are NOT vendored into the repo; this script pins known versions so the
-# benchmark is reproducible. Run from the repo root: third_party/fetch_targets.sh
+# Fetch and build the real fuzzing targets with coverage instrumentation.
+# Produces static libraries the benchmark links against. Reproducible: pins
+# versions and builds every target with the same SanitizerCoverage flags.
+#
+#   ./third_party/fetch_targets.sh          # builds mbedTLS (deep) + libtasn1
+#
+# Requires: clang, git, curl, ar. Run from the repo root.
 set -euo pipefail
 
 HERE="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 cd "$HERE"
-
 CC="${CC:-clang}"
-COV_FLAGS="-g -O1 -fsanitize=address,undefined -fsanitize-coverage=trace-pc-guard,trace-cmp"
+COV="-O1 -g -fsanitize-coverage=trace-pc-guard,trace-cmp -w"
 
-# Pinned versions for reproducibility.
-LIBTASN1_VER="4.19.0"
-MBEDTLS_VER="3.6.0"
+# ---------------------------------------------------------------------------
+# mbedTLS -- the DEEP X.509 parser (mbedtls_x509_crt_parse_der). This is the
+# headline benchmark target: a real certificate parser that recursively decodes
+# the whole structure, so structure-aware fuzzing has room to pay off.
+# ---------------------------------------------------------------------------
+build_mbedtls() {
+  echo "[mbedtls] fetching v3.6.2"
+  rm -rf mbedtls
+  git clone --depth 1 --branch v3.6.2 https://github.com/Mbed-TLS/mbedtls.git
+  echo "[mbedtls] compiling library/*.c with coverage"
+  mkdir -p mbedtls_obj
+  for c in mbedtls/library/*.c; do
+    "$CC" -c $COV -Imbedtls/include -Imbedtls/library "$c" \
+          -o "mbedtls_obj/$(basename "${c%.c}").o"
+  done
+  ar rcs libmbedtls_cov.a mbedtls_obj/*.o
+  echo "[mbedtls] -> $HERE/libmbedtls_cov.a (link harnesses/mbedtls_harness.c)"
+}
 
-echo "[fetch] libtasn1 ${LIBTASN1_VER}"
-# curl -LO "https://ftp.gnu.org/gnu/libtasn1/libtasn1-${LIBTASN1_VER}.tar.gz"
-# tar xf "libtasn1-${LIBTASN1_VER}.tar.gz"
-# (cd libtasn1-${LIBTASN1_VER} && CFLAGS="$COV_FLAGS" ./configure --disable-shared && make -j)
+# ---------------------------------------------------------------------------
+# GNU libtasn1 -- a dedicated ASN.1 library. Built from a git checkout without
+# the full autotools/gnulib bootstrap: we vendor the few gnulib headers the core
+# parser needs and supply a minimal config.h. (Note: the shipped harness drives
+# the low-level tag/length API, which is comparatively shallow; mbedTLS is the
+# better target for showing the structure-aware advantage.)
+# ---------------------------------------------------------------------------
+build_libtasn1() {
+  echo "[libtasn1] fetching"
+  rm -rf libtasn1
+  git clone --depth 1 https://github.com/gnutls/libtasn1.git
+  cd libtasn1
+  for h in intprops.h intprops-internal.h minmax.h c-ctype.h; do
+    curl -fsSL -o "lib/$h" "https://raw.githubusercontent.com/coreutils/gnulib/master/lib/$h"
+  done
+  sed -e 's/@MAJOR_VERSION@/4/g' -e 's/@MINOR_VERSION@/20/g' \
+      -e 's/@PATCH_VERSION@/0/g' -e 's/@NUMBER_VERSION@/0x041400/g' \
+      -e 's/@VERSION@/4.20.0/g' lib/includes/libtasn1.h.in > lib/includes/libtasn1.h
+  cat > lib/config.h <<'CFG'
+#ifndef NYX_LIBTASN1_CONFIG_H
+#define NYX_LIBTASN1_CONFIG_H
+#define _GL_CONFIG_H_INCLUDED 1
+#include <stdbool.h>
+#include <stddef.h>
+#ifndef _GNU_SOURCE
+#define _GNU_SOURCE 1
+#endif
+#define SIZEOF_UNSIGNED_INT 4
+#define SIZEOF_UNSIGNED_LONG_INT 8
+#define SIZEOF_INT 4
+#define SIZEOF_LONG 8
+#define _GL_INLINE static inline
+#define _GL_EXTERN_INLINE static inline
+#define _GL_INLINE_HEADER_BEGIN
+#define _GL_INLINE_HEADER_END
+#define _GL_UNUSED
+#define _GL_ATTRIBUTE_CONST
+#define _GL_ATTRIBUTE_PURE
+#define _GL_ATTRIBUTE_MAYBE_UNUSED
+#define _GL_ATTRIBUTE_NODISCARD
+#endif
+CFG
+  for f in coding decoding element errors gstr parser_aux structure; do
+    "$CC" -c $COV -DHAVE_CONFIG_H -include config.h -Ilib -Ilib/includes \
+          "lib/$f.c" -o "/tmp/lt_$f.o"
+  done
+  ar rcs "$HERE/liblibtasn1_cov.a" /tmp/lt_*.o
+  cd "$HERE"
+  echo "[libtasn1] -> $HERE/liblibtasn1_cov.a (link harnesses/libtasn1_harness.c)"
+}
 
-echo "[fetch] mbedtls ${MBEDTLS_VER}"
-# git clone --depth 1 --branch v${MBEDTLS_VER} https://github.com/Mbed-TLS/mbedtls
-# (cd mbedtls && CFLAGS="$COV_FLAGS" cmake -B build -DENABLE_TESTING=Off && cmake --build build -j)
-
-cat <<'NOTE'
-NOTE: download/build commands are commented out so this script is safe to read
-and adapt. Uncomment once you are on a machine with network + the toolchain.
-Each target is built with:
-    -fsanitize=address,undefined            (memory + UB bug detection)
-    -fsanitize-coverage=trace-pc-guard,trace-cmp   (edge coverage + cmp operands)
-Then link the matching harness from ../harnesses/ against the built library.
-NOTE
+build_mbedtls
+build_libtasn1
+echo "Done. Build the benchmark with third_party/build_bench.sh"

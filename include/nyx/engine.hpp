@@ -42,6 +42,9 @@ struct EngineOptions {
   // UCB1 operator bandit.
   enum class SchedulerKind { kUniform, kEntropy };
   SchedulerKind scheduler = SchedulerKind::kUniform;
+  // If > 0, record (iteration, cumulative edges) into FuzzStats.coverage_timeline
+  // every this-many iterations. Used by the benchmark to plot coverage over time.
+  uint64_t coverage_sample_interval = 0;
 };
 
 struct FuzzStats {
@@ -51,6 +54,7 @@ struct FuzzStats {
   size_t crashes = 0;
   std::vector<uint8_t> first_crash;
   double elapsed_seconds = 0.0;
+  std::vector<std::pair<uint64_t, size_t>> coverage_timeline;  // (iter, edges)
 };
 
 // Run the loop against `target`, growing `corpus` in place. Returns stats.

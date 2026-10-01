@@ -200,6 +200,11 @@ FuzzStats fuzz(TargetFn target, Corpus& corpus, const EngineOptions& opts) {
       corpus.add(candidate, new_edges);
       corpus.at(corpus.size() - 1).edges = std::move(edges);  // for rarity scoring
     }
+
+    if (opts.coverage_sample_interval &&
+        (iter % opts.coverage_sample_interval == 0)) {
+      stats.coverage_timeline.emplace_back(iter, coverage_covered_edges());
+    }
   }
 
   stats.iterations = iter;

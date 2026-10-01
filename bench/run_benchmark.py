@@ -1,104 +1,117 @@
 #!/usr/bin/env python3
 """
-Nyx benchmark harness (FuzzBench-style).
-========================================
+Analyse a Nyx benchmark run and produce statistics + a coverage-over-time plot.
 
-Runs several fuzzers against the SAME instrumented target for a fixed time
-budget, repeated over N independent trials, and records edge coverage and
-unique crashes over time. The point is a FAIR, REPRODUCIBLE comparison with
-statistical backing -- not a single cherry-picked run.
+The C++ `bench_runner` (built against an instrumented target) writes two CSVs:
+    summary.csv   mode,trial,final_edges,crashes,iters
+    timeline.csv  mode,trial,iter,edges
 
-Fuzzers compared:
-    - nyx        (this project: structure-aware + entropy-guided)
-    - nyx-uniform(ablation: structure-aware, entropy scheduler OFF)
-    - libfuzzer  (in-process baseline)
-    - aflpp      (SOTA general fuzzer)
-    - nautilus   (grammar-based -- the direct competitor)
+This script reads them and reports, per mode, the median/mean/spread of final
+edge coverage; runs a one-sided Mann-Whitney U test between modes (is the
+difference significant, not noise?); and plots the median coverage curve with an
+interquartile band per mode.
 
-Methodology:
-    * fixed wall-clock budget per trial (default 24h; use --seconds for smoke)
-    * N trials per fuzzer (default 10) with different seeds
-    * report median coverage with 95% CI, and a Mann-Whitney U test between
-      nyx and each baseline (significance of the difference)
-
-This file is the orchestration skeleton; per-fuzzer adapters are added in Phase 4.
+Usage:
+    python bench/run_benchmark.py --in bench_results --out bench/results
 """
-
 import argparse
-import json
-import statistics
-import subprocess
-import time
-from dataclasses import dataclass, field, asdict
+import csv
+import statistics as st
+from collections import defaultdict
 from pathlib import Path
 
-FUZZERS = ["nyx", "nyx-uniform", "libfuzzer", "aflpp", "nautilus"]
+MODES = ["byte", "uniform", "entropy"]
+LABEL = {
+    "byte": "byte-level",
+    "uniform": "structure-aware (uniform)",
+    "entropy": "structure-aware (entropy)",
+}
+COLOR = {"byte": "#888888", "uniform": "#5b8cff", "entropy": "#00b894"}
 
 
-@dataclass
-class TrialResult:
-    fuzzer: str
-    trial: int
-    seconds: int
-    edges_over_time: list = field(default_factory=list)  # (t, edge_count)
-    unique_crashes: int = 0
-    time_to_first_crash: float | None = None
+def load_finals(path):
+    finals = defaultdict(list)
+    with open(path) as f:
+        for r in csv.DictReader(f):
+            finals[r["mode"]].append(int(r["final_edges"]))
+    return finals
 
 
-def run_trial(fuzzer: str, target: Path, corpus: Path, seconds: int,
-              trial: int, out_dir: Path) -> TrialResult:
-    """Run one fuzzer for `seconds` and collect its coverage/crash timeline.
-
-    TODO(phase-4): dispatch to the per-fuzzer adapter that knows how to launch
-    it against `target`, poll coverage, and harvest crashes. For nyx this shells
-    out to the nyx binary; for the baselines to their standard CLIs.
-    """
-    raise NotImplementedError(f"adapter for {fuzzer} not implemented yet")
+def load_timeline(path):
+    tl = defaultdict(lambda: defaultdict(list))
+    with open(path) as f:
+        for r in csv.DictReader(f):
+            tl[r["mode"]][int(r["iter"])].append(int(r["edges"]))
+    return tl
 
 
-def summarize(results: list[TrialResult]) -> dict:
-    """Median final coverage + spread per fuzzer (CI and Mann-Whitney in Phase 4)."""
-    summary = {}
-    by_fuzzer: dict[str, list[int]] = {}
-    for r in results:
-        final = r.edges_over_time[-1][1] if r.edges_over_time else 0
-        by_fuzzer.setdefault(r.fuzzer, []).append(final)
-    for fuzzer, finals in by_fuzzer.items():
-        summary[fuzzer] = {
-            "trials": len(finals),
-            "median_edges": statistics.median(finals) if finals else 0,
-            "mean_edges": statistics.mean(finals) if finals else 0,
-            "stdev": statistics.pstdev(finals) if len(finals) > 1 else 0.0,
-        }
-    return summary
+def report(finals):
+    print("=== Final edge coverage ===")
+    for m in MODES:
+        if not finals.get(m):
+            continue
+        v = finals[m]
+        print(f"  {LABEL[m]:<30} median={st.median(v):.0f}  mean={st.mean(v):.1f}"
+              f"  sd={st.pstdev(v):.1f}  n={len(v)}")
+
+    try:
+        from scipy.stats import mannwhitneyu
+    except ImportError:
+        print("\n(scipy not installed; skipping significance tests)")
+        return
+
+    def mw(a, b):
+        return mannwhitneyu(finals[a], finals[b], alternative="greater").pvalue
+
+    print("\n=== Mann-Whitney U (one-sided: row reaches more coverage) ===")
+    if finals.get("uniform") and finals.get("byte"):
+        print(f"  structure-aware(uniform) > byte-level : p = {mw('uniform','byte'):.4g}")
+    if finals.get("entropy") and finals.get("byte"):
+        print(f"  structure-aware(entropy) > byte-level : p = {mw('entropy','byte'):.4g}")
+    if finals.get("entropy") and finals.get("uniform"):
+        print(f"  structure-aware(entropy) > uniform    : p = {mw('entropy','uniform'):.4g}")
+
+
+def plot(tl, out_png):
+    try:
+        import numpy as np
+        import matplotlib
+        matplotlib.use("Agg")
+        import matplotlib.pyplot as plt
+    except ImportError:
+        print("(matplotlib/numpy not installed; skipping plot)")
+        return
+    plt.figure(figsize=(8, 5))
+    for m in MODES:
+        if m not in tl:
+            continue
+        iters = sorted(tl[m])
+        med = [st.median(tl[m][i]) for i in iters]
+        lo = [np.percentile(tl[m][i], 25) for i in iters]
+        hi = [np.percentile(tl[m][i], 75) for i in iters]
+        plt.plot(iters, med, label=LABEL[m], color=COLOR[m], linewidth=2)
+        plt.fill_between(iters, lo, hi, color=COLOR[m], alpha=0.15)
+    plt.xlabel("iterations")
+    plt.ylabel("edge coverage (median of trials)")
+    plt.title("Nyx: coverage over time")
+    plt.legend(loc="lower right")
+    plt.grid(alpha=0.3)
+    plt.tight_layout()
+    plt.savefig(out_png, dpi=120)
+    print(f"\nplot -> {out_png}")
 
 
 def main():
-    ap = argparse.ArgumentParser(description="Nyx fuzzer benchmark")
-    ap.add_argument("--target", required=True, type=Path)
-    ap.add_argument("--corpus", required=True, type=Path)
-    ap.add_argument("--seconds", type=int, default=86400, help="budget per trial")
-    ap.add_argument("--trials", type=int, default=10)
-    ap.add_argument("--fuzzers", nargs="+", default=FUZZERS, choices=FUZZERS)
-    ap.add_argument("--out", type=Path, default=Path("bench_results"))
+    ap = argparse.ArgumentParser()
+    ap.add_argument("--in", dest="indir", default="bench_results")
+    ap.add_argument("--out", dest="outdir", default="bench/results")
     args = ap.parse_args()
-    args.out.mkdir(parents=True, exist_ok=True)
+    indir, outdir = Path(args.indir), Path(args.outdir)
+    outdir.mkdir(parents=True, exist_ok=True)
 
-    all_results: list[TrialResult] = []
-    for fuzzer in args.fuzzers:
-        for trial in range(args.trials):
-            print(f"[bench] {fuzzer} trial {trial+1}/{args.trials} "
-                  f"({args.seconds}s)")
-            try:
-                res = run_trial(fuzzer, args.target, args.corpus,
-                                args.seconds, trial, args.out)
-                all_results.append(res)
-            except NotImplementedError as e:
-                print(f"  skipped: {e}")
-
-    summary = summarize(all_results)
-    (args.out / "summary.json").write_text(json.dumps(summary, indent=2))
-    print(json.dumps(summary, indent=2))
+    finals = load_finals(indir / "summary.csv")
+    report(finals)
+    plot(load_timeline(indir / "timeline.csv"), str(outdir / "coverage.png"))
 
 
 if __name__ == "__main__":

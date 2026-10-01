@@ -148,8 +148,11 @@ identical `LLVMFuzzerTestOneInput` harness so the comparison is fair.
   detection. *A working fuzzer.*
 - **Phase 2** — Structure-aware mutator on the DER tree (core ready ✅).
 - **Phase 2b** — X.509 semantic grammar layer.
-- **Phase 3** — Entropy-guided scheduler + uniform ablation baseline.
-- **Phase 4** — Benchmark harness, targets, trials, statistics, plots.
+- **Phase 3** — Entropy-guided scheduler + uniform ablation baseline. ✅
+- **Phase 4** — Benchmark harness, real targets, trials, statistics, plots. ✅
+  Result on the real mbedTLS X.509 parser: structure-aware +10% coverage over
+  byte-level (p≈1.7e-6); entropy scheduler > uniform (p≈0.017). See
+  `bench/results/RESULTS.md`.
 
 Each phase is independently showable, so the project is portfolio-valuable at
 every milestone, not only at the end.

@@ -7,9 +7,15 @@ compile_commands.json
 
 # Fetched/built targets (reproduced via third_party/fetch_targets.sh)
 third_party/libtasn1-*/
+third_party/libtasn1/
 third_party/mbedtls/
+third_party/mbedtls_obj/
+third_party/*.a
 third_party/*.tar.gz
 target_*
+
+# Benchmark working dir (committed results live in bench/results/)
+bench_results/
 
 # Fuzzer output
 bench_results/
