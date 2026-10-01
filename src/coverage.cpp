@@ -9,6 +9,7 @@
 #include "nyx/coverage.hpp"
 
 #include <cmath>
+#include <algorithm>
 #include <cstring>
 
 namespace nyx {
@@ -36,6 +37,13 @@ void coverage_reset() {
   auto& s = state();
   std::memset(s.edges.data(), 0, s.edges.size());
   s.cmps.clear();
+}
+
+void coverage_reset_global() {
+  auto& s = state();
+  std::fill(s.global_hits.begin(), s.global_hits.end(), 0);
+  s.total_execs = 0;
+  coverage_reset();
 }
 
 size_t coverage_edges_hit() {

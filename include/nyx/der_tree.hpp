@@ -9,6 +9,7 @@
 // into a parser instead of being rejected at the first length/tag check.
 // -----------------------------------------------------------------------------
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 namespace nyx {
@@ -36,6 +37,12 @@ struct DerNode {
   Tag tag;
   std::vector<uint8_t> content;    // valid for primitive nodes
   std::vector<DerNode> children;   // valid for constructed nodes
+
+  // Fuzzing hook: when set, the serializer emits THIS as the length octets
+  // instead of the true content size, producing a length/content mismatch --
+  // the classic ASN.1 parser-confusion bug class. Defaults to unset, so a
+  // freshly parsed tree always round-trips exactly.
+  std::optional<uint64_t> length_override;
 
   bool is_constructed() const { return tag.constructed; }
 };

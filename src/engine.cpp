@@ -10,6 +10,9 @@
 
 #include "nyx/byte_mutator.hpp"
 #include "nyx/coverage.hpp"
+#include "nyx/der_parser.hpp"
+#include "nyx/der_serializer.hpp"
+#include "nyx/mutator.hpp"
 
 namespace nyx {
 namespace {
@@ -74,8 +77,30 @@ double now_seconds() {
 
 FuzzStats fuzz(TargetFn target, Corpus& corpus, const EngineOptions& opts) {
   install_handlers();
+  coverage_reset_global();  // each campaign starts with a clean coverage history
   ByteMutator mutator(opts.seed);
+  Mutator tree_mutator(opts.seed ^ 0xA5A5A5A5A5A5A5A5ull);
+  MutatorConfig mcfg;
   std::mt19937_64 rng(opts.seed ^ 0xD1B54A32D192ED03ull);
+
+  // Structure-aware candidate generation: parse the seed to a DER tree, mutate
+  // the tree, re-serialize. Falls back to byte mutation when the seed is not
+  // valid DER (so the loop never stalls on unparseable inputs).
+  auto make_candidate = [&](const std::vector<uint8_t>& seed,
+                            const std::vector<uint8_t>* other) -> std::vector<uint8_t> {
+    if (opts.structure_aware) {
+      ParseError err;
+      auto tree = parse_der(seed, err);
+      if (tree) {
+        tree_mutator.mutate(*tree, mcfg);
+        auto out = serialize_der(*tree);
+        if (out.empty()) out.push_back(0);
+        return out;
+      }
+      // fall through to byte mutation on parse failure
+    }
+    return mutator.mutate(seed, other);
+  };
 
   // Prime cumulative coverage with the existing corpus.
   for (size_t i = 0; i < corpus.size(); ++i) {
@@ -104,7 +129,7 @@ FuzzStats fuzz(TargetFn target, Corpus& corpus, const EngineOptions& opts) {
       size_t j = corpus.pick(rng);
       other = &corpus[j].data;
     }
-    std::vector<uint8_t> candidate = mutator.mutate(corpus[idx].data, other);
+    std::vector<uint8_t> candidate = make_candidate(corpus[idx].data, other);
 
     bool crashed = run_once(target, candidate.data(), candidate.size());
     if (crashed) {

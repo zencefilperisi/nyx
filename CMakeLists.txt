@@ -38,10 +38,11 @@ add_executable(test_roundtrip tests/test_roundtrip.cpp)
 target_link_libraries(test_roundtrip PRIVATE nyx_core)
 add_test(NAME roundtrip COMMAND test_roundtrip)
 
-# Phase-0 coverage test needs Clang's SanitizerCoverage (-fsanitize-coverage).
-# The demo target is compiled WITH instrumentation; the runtime (in nyx_core) is
-# not. Skipped automatically on non-Clang compilers.
-if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
+# The instrumented demo targets are C files that need Clang's SanitizerCoverage
+# (-fsanitize-coverage=trace-pc-guard,trace-cmp), which GCC does not support.
+# Guard on the C compiler (that's what builds them), so a gcc C compiler -- even
+# alongside clang++ -- correctly skips these instead of failing the build.
+if(CMAKE_C_COMPILER_ID MATCHES "Clang")
   add_library(phase0_target STATIC tests/phase0_target.c)
   target_compile_options(phase0_target PRIVATE
     -O0 -fsanitize-coverage=trace-pc-guard,trace-cmp)
@@ -56,6 +57,14 @@ if(CMAKE_CXX_COMPILER_ID MATCHES "Clang")
   add_executable(test_engine tests/test_engine.cpp)
   target_link_libraries(test_engine PRIVATE nyx_core phase1_target)
   add_test(NAME engine COMMAND test_engine)
+
+  # Phase-2: structure-aware mutator vs byte-level on a structure-gated target.
+  add_library(phase2_target STATIC tests/phase2_target.c)
+  target_compile_options(phase2_target PRIVATE
+    -O0 -fsanitize-coverage=trace-pc-guard,trace-cmp)
+  add_executable(test_structure tests/test_structure.cpp)
+  target_link_libraries(test_structure PRIVATE nyx_core phase2_target)
+  add_test(NAME structure COMMAND test_structure)
 endif()
 
 # Optional: build with sanitizers for local bug-hunting on the engine itself.

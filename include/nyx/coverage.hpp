@@ -31,6 +31,11 @@ struct CmpOperand {
 // Clear per-execution state. Call immediately before running the target.
 void coverage_reset();
 
+// Clear the CUMULATIVE histogram too (start a fresh fuzzing campaign). Without
+// this, separate campaigns in the same process share coverage state, which
+// would invalidate an A/B comparison between two fuzzers.
+void coverage_reset_global();
+
 // Number of distinct edges hit during the last execution.
 size_t coverage_edges_hit();
 

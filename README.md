@@ -15,8 +15,12 @@ highest.
 > - ✅ **Phase 1** — working coverage-guided loop: corpus, byte mutator, in-process
 >   execution with crash trapping. Demonstrated finding a planted bug that blind
 >   fuzzing misses in the same budget.
-> - ⏳ Phase 2 (structure-aware mutator), 2b (X.509 grammar), 3 (entropy scheduler),
->   4 (benchmark vs Nautilus). See [DESIGN.md](DESIGN.md).
+> - ✅ **Phase 2** — structure-aware mutator on the DER tree (10 tree operators +
+>   length-confusion). On a structure-gated target it found the bug in ~8k
+>   iterations while byte-level fuzzing missed it in 300k, and reached strictly
+>   more coverage — the core differentiator, measured.
+> - ⏳ Phase 2b (X.509 grammar), 3 (entropy scheduler), 4 (benchmark vs Nautilus).
+>   See [DESIGN.md](DESIGN.md).
 
 ## Why it's built this way
 

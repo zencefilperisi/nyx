@@ -53,10 +53,12 @@ void serialize_der(const DerNode& node, std::vector<uint8_t>& out) {
   if (node.tag.constructed) {
     std::vector<uint8_t> body;
     for (const auto& child : node.children) serialize_der(child, body);
-    encode_length(body.size(), out);
+    // length_override lets the fuzzer emit a deliberately wrong length while
+    // still writing the real body -- a length/content mismatch.
+    encode_length(node.length_override.value_or(body.size()), out);
     out.insert(out.end(), body.begin(), body.end());
   } else {
-    encode_length(node.content.size(), out);
+    encode_length(node.length_override.value_or(node.content.size()), out);
     out.insert(out.end(), node.content.begin(), node.content.end());
   }
 }

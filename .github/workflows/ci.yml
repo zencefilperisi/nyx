@@ -12,7 +12,13 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        compiler: [g++, clang++]
+        include:
+          # Clang builds and runs the full suite (SanitizerCoverage targets).
+          - { cc: clang, cxx: clang++, name: clang }
+          # GCC builds the portable core; the Clang-only coverage targets are
+          # skipped automatically (GCC lacks -fsanitize-coverage=trace-pc-guard).
+          - { cc: gcc, cxx: g++, name: gcc }
+    name: build-${{ matrix.name }}
     steps:
       - uses: actions/checkout@v4
 
@@ -22,7 +28,10 @@ jobs:
           sudo apt-get install -y cmake clang
 
       - name: Configure
-        run: cmake -S . -B build -DCMAKE_CXX_COMPILER=${{ matrix.compiler }}
+        run: >
+          cmake -S . -B build
+          -DCMAKE_C_COMPILER=${{ matrix.cc }}
+          -DCMAKE_CXX_COMPILER=${{ matrix.cxx }}
 
       - name: Build
         run: cmake --build build -j
@@ -36,8 +45,10 @@ jobs:
       - uses: actions/checkout@v4
       - name: Install toolchain
         run: sudo apt-get update && sudo apt-get install -y cmake clang
-      - name: Configure (ASan + UBSan)
-        run: cmake -S . -B build-asan -DNYX_ASAN=ON -DCMAKE_CXX_COMPILER=clang++
+      - name: Configure (ASan + UBSan, Clang for C and C++)
+        run: >
+          cmake -S . -B build-asan -DNYX_ASAN=ON
+          -DCMAKE_C_COMPILER=clang -DCMAKE_CXX_COMPILER=clang++
       - name: Build
         run: cmake --build build-asan -j
       - name: Test under sanitizers
