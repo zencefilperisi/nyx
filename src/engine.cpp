@@ -12,6 +12,7 @@
 #include "nyx/coverage.hpp"
 #include "nyx/der_parser.hpp"
 #include "nyx/der_serializer.hpp"
+#include "nyx/grammar_x509.hpp"
 #include "nyx/mutator.hpp"
 
 namespace nyx {
@@ -82,6 +83,7 @@ FuzzStats fuzz(TargetFn target, Corpus& corpus, const EngineOptions& opts) {
   Mutator tree_mutator(opts.seed ^ 0xA5A5A5A5A5A5A5A5ull);
   MutatorConfig mcfg;
   std::mt19937_64 rng(opts.seed ^ 0xD1B54A32D192ED03ull);
+  std::mt19937_64 sem_rng(opts.seed ^ 0x517CC1B727220A95ull);  // X.509 semantic ops
 
   // Structure-aware candidate generation: parse the seed to a DER tree, mutate
   // the tree, re-serialize. Falls back to byte mutation when the seed is not
@@ -92,7 +94,15 @@ FuzzStats fuzz(TargetFn target, Corpus& corpus, const EngineOptions& opts) {
       ParseError err;
       auto tree = parse_der(seed, err);
       if (tree) {
-        tree_mutator.mutate(*tree, mcfg);
+        // On X.509-looking inputs, sometimes apply a semantic (typed) mutation
+        // in addition to the generic tree mutation -- this is what drives the
+        // parser into date/OID/extension validation code.
+        if (opts.x509_semantic && looks_like_x509(*tree) &&
+            (sem_rng() & 1)) {
+          mutate_x509_semantic(*tree, sem_rng);
+        } else {
+          tree_mutator.mutate(*tree, mcfg);
+        }
         auto out = serialize_der(*tree);
         if (out.empty()) out.push_back(0);
         return out;

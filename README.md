@@ -19,8 +19,12 @@ highest.
 >   length-confusion). On a structure-gated target it found the bug in ~8k
 >   iterations while byte-level fuzzing missed it in 300k, and reached strictly
 >   more coverage — the core differentiator, measured.
-> - ⏳ Phase 2b (X.509 grammar), 3 (entropy scheduler), 4 (benchmark vs Nautilus).
->   See [DESIGN.md](DESIGN.md).
+> - ✅ **Phase 2b** — X.509 semantic grammar: a valid-certificate skeleton builder
+>   plus typed mutations (boundary dates, hostile serials, malformed OIDs,
+>   duplicated extensions). On a target gated behind a semantically-valid boundary
+>   date, semantic mutation found the bug in ~130 iterations while generic
+>   structure-aware missed it in 400k.
+> - ⏳ Phase 3 (entropy scheduler), 4 (benchmark vs Nautilus). See [DESIGN.md](DESIGN.md).
 
 ## Why it's built this way
 

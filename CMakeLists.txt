@@ -23,8 +23,8 @@ add_library(nyx_core
   src/corpus.cpp
   src/byte_mutator.cpp
   src/engine.cpp
+  src/grammar_x509.cpp
   # src/scheduler.cpp      # phase 3
-  # src/grammar_x509.cpp   # phase 2b
 )
 target_include_directories(nyx_core PUBLIC include)
 
@@ -65,6 +65,14 @@ if(CMAKE_C_COMPILER_ID MATCHES "Clang")
   add_executable(test_structure tests/test_structure.cpp)
   target_link_libraries(test_structure PRIVATE nyx_core phase2_target)
   add_test(NAME structure COMMAND test_structure)
+
+  # Phase-2b: X.509 semantic grammar vs generic structure-aware.
+  add_library(phase2b_target STATIC tests/phase2b_target.c)
+  target_compile_options(phase2b_target PRIVATE
+    -O0 -fsanitize-coverage=trace-pc-guard,trace-cmp)
+  add_executable(test_x509 tests/test_x509.cpp)
+  target_link_libraries(test_x509 PRIVATE nyx_core phase2b_target)
+  add_test(NAME x509 COMMAND test_x509)
 endif()
 
 # Optional: build with sanitizers for local bug-hunting on the engine itself.

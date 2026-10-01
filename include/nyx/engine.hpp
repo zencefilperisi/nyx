@@ -33,6 +33,10 @@ struct EngineOptions {
   // (structure-aware) instead of raw bytes. The Phase-2 differentiator; also
   // the ablation axis for "how much is structure awareness worth?".
   bool structure_aware = false;
+  // When true (and structure_aware), inputs that look like X.509 certificates
+  // also receive semantic, typed mutations (boundary dates, hostile serials,
+  // malformed OIDs, duplicated extensions). Phase 2b.
+  bool x509_semantic = false;
 };
 
 struct FuzzStats {
