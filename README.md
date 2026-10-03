@@ -29,9 +29,9 @@ highest.
 >   Mechanics proven deterministically (rare seed chosen 94% vs 20%; bandit
 >   converges to the rewarding operator).
 > - ✅ **Phase 4** — benchmark on the **real mbedTLS X.509 parser** (11,783
->   instrumented edges), 15 trials × 25k iters with Mann-Whitney U significance:
->   structure-aware reaches **+10%** coverage over byte-level (p≈1.7e-6) and the
->   entropy scheduler adds a further significant gain over uniform (p≈0.017).
+>   instrumented edges), 30 trials × 25k iters with Mann-Whitney U significance:
+>   structure-aware reaches **+11%** coverage over byte-level (p≈1.5e-11) and the
+>   entropy scheduler adds a further significant gain over uniform (p≈0.0057).
 >   See [`bench/results/RESULTS.md`](bench/results/RESULTS.md).
 
 ## Headline result
@@ -40,7 +40,7 @@ highest.
 
 On the real **mbedTLS** certificate parser, structure-aware fuzzing significantly
 out-covers byte-level mutation, and the entropy-guided scheduler adds a further
-significant gain over a uniform control — measured over 15 trials with
+significant gain over a uniform control — measured over 30 trials with
 non-parametric significance testing, not a single run. Full numbers, methodology
 and an honest counter-result (where structure awareness does *not* help) are in
 [`bench/results/RESULTS.md`](bench/results/RESULTS.md).

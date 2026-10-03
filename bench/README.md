@@ -17,8 +17,8 @@ so the comparison is fair.
 ## Headline result
 
 On the **mbedTLS X.509 parser** (a real, deep certificate parser), structure-aware
-fuzzing reaches ~10% more coverage than byte-level (p ≈ 1.7e-6), and the entropy
-scheduler adds a further significant gain over uniform (p ≈ 0.017). See
+fuzzing reaches ~11% more coverage than byte-level (p ≈ 1.5e-11), and the entropy
+scheduler adds a further significant gain over uniform (p ≈ 0.0057). See
 [`results/RESULTS.md`](results/RESULTS.md) and the plot there.
 
 ## Run it yourself
@@ -28,7 +28,7 @@ scheduler adds a further significant gain over uniform (p ≈ 0.017). See
 ./third_party/fetch_targets.sh
 
 # 2. Build the runner, fuzz each mode over N trials, analyse + plot:
-./third_party/build_bench.sh mbedtls 25000 15
+./third_party/build_bench.sh mbedtls 25000 30
 #   -> writes bench_results/{summary,timeline}.csv and bench/results/coverage.png
 ```
 
